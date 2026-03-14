@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS VOID — 仮想空間</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Share Tech Mono', monospace;
+    color: #00ffcc;
+    cursor: none;
+  }
+
+  #canvas { display: block; }
+
+  /* カスタムカーソル */
+  #cursor {
+    position: fixed;
+    width: 20px; height: 20px;
+    border: 2px solid #00ffcc;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s;
+    mix-blend-mode: screen;
+  }
+  #cursor::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 4px; height: 4px;
+    background: #00ffcc;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* HUDオーバーレイ */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* タイトル */
+  #title {
+    position: fixed;
+    top: 30px; left: 40px;
+    pointer-events: none;
+    z-index: 200;
+  }
+  #title h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 8px;
+    color: #00ffcc;
+    text-shadow: 0 0 20px #00ffcc, 0 0 40px #00ffcc88;
+    animation: flicker 4s infinite;
+  }
+  #title p {
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: #00ffcc88;
+    margin-top: 4px;
+  }
+
+  @keyframes flicker {
+    0%, 95%, 100% { opacity: 1; }
+    96% { opacity: 0.8; }
+    97% { opacity: 1; }
+    98% { opacity: 0.6; }
+    99% { opacity: 1; }
+  }
+
+  /* ステータスパネル（左下） */
+  #status {
+    position: fixed;
+    bottom: 30px; left: 40px;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .stat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #00ffcc99;
+  }
+  .stat-label { color: #00ffcc55; min-width: 80px; }
+  .stat-bar {
+    width: 100px; height: 3px;
+    background: #00ffcc22;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00ffcc, #00ff88);
+    box-shadow: 0 0 8px #00ffcc;
+    animation: pulse-bar 2s ease-in-out infinite;
+  }
+  @keyframes pulse-bar {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  /* コントロールガイド（右下） */
+  #controls {
+    position: fixed;
+    bottom: 30px; right: 40px;
+    pointer-events: none;
+    z-index: 200;
+    text-align: right;
+  }
+  .ctrl-item {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #00ffcc55;
+    margin-bottom: 6px;
+  }
+  .ctrl-key {
+    display: inline-block;
+    border: 1px solid #00ffcc44;
+    padding: 1px 6px;
+    font-size: 9px;
+    color: #00ffcc88;
+    margin-left: 6px;
+  }
+
+  /* コーナー装飾 */
+  .corner {
+    position: fixed;
+    width: 40px; height: 40px;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .corner::before, .corner::after {
+    content: '';
+    position: absolute;
+    background: #00ffcc;
+  }
+  .corner::before { width: 100%; height: 2px; top: 0; }
+  .corner::after { width: 2px; height: 100%; top: 0; }
+  .corner.tl { top: 20px; left: 20px; }
+  .corner.tr { top: 20px; right: 20px; transform: scaleX(-1); }
+  .corner.bl { bottom: 20px; left: 20px; transform: scaleY(-1); }
+  .corner.br { bottom: 20px; right: 20px; transform: scale(-1); }
+
+  /* スキャンライン */
+  #scanlines {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 300;
+  }
+
+  /* 座標表示 */
+  #coords {
+    position: fixed;
+    top: 30px; right: 40px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #00ffcc55;
+    pointer-events: none;
+    z-index: 200;
+    text-align: right;
+  }
+  #coords span { display: block; margin-bottom: 3px; }
+
+  /* ローディング画面 */
+  #loading {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 1s ease;
+  }
+  #loading h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    letter-spacing: 8px;
+    color: #00ffcc;
+    margin-bottom: 30px;
+    animation: flicker 2s infinite;
+  }
+  #loading-bar-wrap {
+    width: 300px; height: 2px;
+    background: #00ffcc22;
+    overflow: hidden;
+  }
+  #loading-bar {
+    height: 100%;
+    width: 0%;
+    background: #00ffcc;
+    box-shadow: 0 0 10px #00ffcc;
+    transition: width 0.1s;
+  }
+  #loading-text {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: #00ffcc44;
+    margin-top: 12px;
+  }
+
+  /* チャット（右上） */
+  #chat-panel {
+    position: fixed;
+    top: 80px; right: 40px;
+    width: 240px;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .chat-msg {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #00ffcc88;
+    margin-bottom: 6px;
+    opacity: 0;
+    transform: translateX(20px);
+    animation: slide-in 0.5s forwards;
+  }
+  .chat-name { color: #ff0088; margin-right: 6px; }
+  @keyframes slide-in {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ミニマップ */
+  #minimap {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 80px;
+    border: 1px solid #00ffcc33;
+    background: #00000088;
+    pointer-events: none;
+    z-index: 200;
+    overflow: hidden;
+  }
+  #minimap canvas { display: block; }
+  #minimap-label {
+    position: absolute;
+    top: 4px; left: 8px;
+    font-size: 8px;
+    letter-spacing: 2px;
+    color: #00ffcc44;
+  }
+
+  /* ポータル情報 */
+  #portal-info {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #portal-info.visible { opacity: 1; }
+  #portal-info h3 {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    letter-spacing: 4px;
+    color: #ff0088;
+    text-shadow: 0 0 20px #ff0088;
+    margin-bottom: 8px;
+  }
+  #portal-info p {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #ff008888;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <h2>NEXUS VOID</h2>
+  <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+  <div id="loading-text">INITIALIZING VIRTUAL SPACE...</div>
+</div>
+
+<div id="cursor"></div>
+<div id="scanlines"></div>
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div id="title">
+  <h1>NEXUS VOID</h1>
+  <p>VIRTUAL SPACE v2.0.77</p>
+</div>
+
+<div id="coords">
+  <span id="coord-x">X: 0.000</span>
+  <span id="coord-y">Y: 0.000</span>
+  <span id="coord-z">Z: 0.000</span>
+  <span id="coord-zone" style="color:#ff008877;margin-top:6px;">ZONE: ORIGIN</span>
+</div>
+
+<div id="status">
+  <div class="stat-row">
+    <span class="stat-label">SYNC</span>
+    <div class="stat-bar"><div class="stat-fill" style="width:87%"></div></div>
+    <span>87%</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-label">ENERGY</span>
+    <div class="stat-bar"><div class="stat-fill" style="width:64%;animation-delay:0.5s"></div></div>
+    <span>64%</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-label">SIGNAL</span>
+    <div class="stat-bar"><div class="stat-fill" style="width:92%;animation-delay:1s"></div></div>
+    <span>92%</span>
+  </div>
+</div>
+
+<div id="controls">
+  <div class="ctrl-item">移動 <span class="ctrl-key">W A S D</span></div>
+  <div class="ctrl-item">視点 <span class="ctrl-key">ドラッグ</span></div>
+  <div class="ctrl-item">上下 <span class="ctrl-key">Q / E</span></div>
+  <div class="ctrl-item">加速 <span class="ctrl-key">SHIFT</span></div>
+</div>
+
+<div id="chat-panel"></div>
+
+<div id="minimap">
+  <canvas id="minimap-canvas" width="120" height="80"></canvas>
+  <span id="minimap-label">MAP</span>
+</div>
+
+<div id="portal-info">
+  <h3>⬡ PORTAL DETECTED</h3>
+  <p>ENTER TO TELEPORT</p>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===== LOADING =====
+const loadingBar = document.getElementById('loading-bar');
+const loadingEl = document.getElementById('loading');
+const loadingText = document.getElementById('loading-text');
+let loadProgress = 0;
+const msgs = ['LOADING TEXTURES...','BUILDING GEOMETRY...','SPAWNING ENTITIES...','CALIBRATING PHYSICS...','ENTERING VOID...'];
+let msgIdx = 0;
+const loadInterval = setInterval(() => {
+  loadProgress += Math.random() * 15;
+  if (loadProgress > 100) loadProgress = 100;
+  loadingBar.style.width = loadProgress + '%';
+  if (msgIdx < msgs.length && loadProgress > msgIdx * 20) {
+    loadingText.textContent = msgs[msgIdx++];
+  }
+  if (loadProgress >= 100) {
+    clearInterval(loadInterval);
+    setTimeout(() => {
+      loadingEl.style.opacity = '0';
+      setTimeout(() => loadingEl.style.display = 'none', 1000);
+    }, 500);
+  }
+}, 80);
+
+// ===== THREE.JS SETUP =====
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.8;
+
+scene.fog = new THREE.FogExp2(0x000000, 0.012);
+
+camera.position.set(0, 3, 10);
+
+// ===== BACKGROUND =====
+scene.background = new THREE.Color(0x000005);
+
+// ===== LIGHTING =====
+const ambientLight = new THREE.AmbientLight(0x001122, 0.5);
+scene.add(ambientLight);
+
+// メインライト（シアン）
+const cyanLight = new THREE.PointLight(0x00ffcc, 3, 50);
+cyanLight.position.set(0, 15, 0);
+scene.add(cyanLight);
+
+// アクセントライト（ピンク）
+const pinkLight = new THREE.PointLight(0xff0088, 2, 40);
+pinkLight.position.set(20, 5, -20);
+scene.add(pinkLight);
+
+// ブルーライト
+const blueLight = new THREE.PointLight(0x0044ff, 2, 40);
+blueLight.position.set(-20, 5, 20);
+scene.add(blueLight);
+
+// ===== GROUND GRID =====
+function createGrid() {
+  const size = 200;
+  const divisions = 40;
+  const gridHelper = new THREE.GridHelper(size, divisions, 0x00ffcc, 0x003333);
+  gridHelper.material.opacity = 0.4;
+  gridHelper.material.transparent = true;
+  scene.add(gridHelper);
+
+  // 反射プレーン
+  const planeGeo = new THREE.PlaneGeometry(200, 200);
+  const planeMat = new THREE.MeshStandardMaterial({
+    color: 0x000011,
+    metalness: 0.9,
+    roughness: 0.1,
+    transparent: true,
+    opacity: 0.8,
+  });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = -0.05;
+  plane.receiveShadow = true;
+  scene.add(plane);
+}
+createGrid();
+
+// ===== BUILDINGS =====
+const buildings = [];
+function createBuilding(x, z, width, height, depth, colorHex, glowColor) {
+  const geo = new THREE.BoxGeometry(width, height, depth);
+  const mat = new THREE.MeshStandardMaterial({
+    color: colorHex,
+    metalness: 0.8,
+    roughness: 0.2,
+    emissive: new THREE.Color(glowColor),
+    emissiveIntensity: 0.1,
+    transparent: true,
+    opacity: 0.85,
+    wireframe: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, height / 2, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  // ワイヤーフレームオーバーレイ
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: glowColor,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.15,
+  });
+  const wireMesh = new THREE.Mesh(geo, wireMat);
+  mesh.add(wireMesh);
+
+  // 頂部グロー
+  const topGeo = new THREE.BoxGeometry(width + 0.2, 0.1, depth + 0.2);
+  const topMat = new THREE.MeshBasicMaterial({ color: glowColor, transparent: true, opacity: 0.6 });
+  const topMesh = new THREE.Mesh(topGeo, topMat);
+  topMesh.position.y = height / 2;
+  mesh.add(topMesh);
+
+  buildings.push(mesh);
+  return mesh;
+}
+
+// ビル群配置
+const buildingData = [
+  [-15, -20, 4, 18, 4, 0x001122, 0x00ffcc],
+  [-10, -25, 3, 25, 3, 0x000d22, 0x0088ff],
+  [-20, -15, 5, 14, 5, 0x110011, 0xff0088],
+  [15, -20, 4, 20, 4, 0x001122, 0x00ffcc],
+  [10, -28, 3, 30, 3, 0x000d22, 0x0088ff],
+  [20, -15, 6, 16, 6, 0x110011, 0xff0088],
+  [-15, 20, 4, 22, 4, 0x001122, 0x00ffcc],
+  [15, 20, 5, 18, 5, 0x000d22, 0x0088ff],
+  [0, -30, 8, 35, 8, 0x001122, 0x00ffcc],
+  [-30, 0, 5, 28, 5, 0x110011, 0xff0088],
+  [30, 0, 5, 24, 5, 0x000d22, 0x0088ff],
+  [-8, 25, 3, 15, 3, 0x110011, 0xff0088],
+  [8, 28, 4, 20, 4, 0x001122, 0x00ffcc],
+];
+buildingData.forEach(d => createBuilding(...d));
+
+// ===== FLOATING PLATFORMS =====
+const platforms = [];
+function createPlatform(x, y, z, size, color) {
+  const geo = new THREE.BoxGeometry(size, 0.3, size);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x000011,
+    metalness: 0.9,
+    roughness: 0.1,
+    emissive: new THREE.Color(color),
+    emissiveIntensity: 0.3,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+
+  // 縁の光
+  const edgeGeo = new THREE.EdgesGeometry(geo);
+  const edgeMat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.8 });
+  const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+  mesh.add(edges);
+
+  scene.add(mesh);
+  platforms.push({ mesh, baseY: y, speed: 0.5 + Math.random() * 0.5, phase: Math.random() * Math.PI * 2 });
+  return mesh;
+}
+
+createPlatform(5, 4, -5, 4, 0x00ffcc);
+createPlatform(-6, 6, -3, 3, 0xff0088);
+createPlatform(0, 8, 8, 5, 0x0088ff);
+createPlatform(-8, 5, 5, 3, 0x00ffcc);
+createPlatform(10, 7, 2, 4, 0xff0088);
+
+// ===== PORTALS =====
+const portals = [];
+function createPortal(x, y, z, color) {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+
+  // リング
+  const ringGeo = new THREE.TorusGeometry(2, 0.15, 16, 64);
+  const ringMat = new THREE.MeshBasicMaterial({ color: color });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  group.add(ring);
+
+  // 内側（ポータル面）
+  const portalGeo = new THREE.CircleGeometry(1.85, 64);
+  const portalMat = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.DoubleSide,
+  });
+  const portal = new THREE.Mesh(portalGeo, portalMat);
+  group.add(portal);
+
+  // パーティクル
+  const particleCount = 30;
+  const pGeo = new THREE.BufferGeometry();
+  const pPositions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (i / particleCount) * Math.PI * 2;
+    pPositions[i * 3] = Math.cos(angle) * (1.8 + Math.random() * 0.4);
+    pPositions[i * 3 + 1] = Math.sin(angle) * (1.8 + Math.random() * 0.4);
+    pPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+  }
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+  const pMat = new THREE.PointsMaterial({ color: color, size: 0.1, transparent: true, opacity: 0.8 });
+  const particles = new THREE.Points(pGeo, pMat);
+  group.add(particles);
+
+  scene.add(group);
+  portals.push({ group, ring, color, phase: Math.random() * Math.PI * 2 });
+  return group;
+}
+
+createPortal(0, 3, -12, 0x00ffcc);
+createPortal(-12, 3, 0, 0xff0088);
+createPortal(12, 3, 0, 0x0088ff);
+
+// ===== FLOATING PARTICLES =====
+function createParticleField() {
+  const count = 2000;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+
+  const colorOptions = [
+    new THREE.Color(0x00ffcc),
+    new THREE.Color(0xff0088),
+    new THREE.Color(0x0088ff),
+  ];
+
+  for (let i = 0; i < count; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 160;
+    positions[i * 3 + 1] = Math.random() * 60;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 160;
+
+    const c = colorOptions[Math.floor(Math.random() * 3)];
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: 0.12,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.7,
+    sizeAttenuation: true,
+  });
+
+  const particles = new THREE.Points(geo, mat);
+  scene.add(particles);
+  return particles;
+}
+const particleField = createParticleField();
+
+// ===== ENERGY PILLARS =====
+function createEnergyPillar(x, z, color) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+
+  const baseGeo = new THREE.CylinderGeometry(0.3, 0.5, 0.5, 8);
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: 0x001122, metalness: 0.9, roughness: 0.1,
+    emissive: new THREE.Color(color), emissiveIntensity: 0.5
+  });
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.position.y = 0.25;
+  group.add(base);
+
+  const pillarGeo = new THREE.CylinderGeometry(0.05, 0.05, 20, 6);
+  const pillarMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.6 });
+  const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+  pillar.position.y = 10.5;
+  group.add(pillar);
+
+  const glowGeo = new THREE.CylinderGeometry(0.15, 0.15, 20, 6);
+  const glowMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.1 });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.position.y = 10.5;
+  group.add(glow);
+
+  scene.add(group);
+  return group;
+}
+
+createEnergyPillar(-8, -8, 0x00ffcc);
+createEnergyPillar(8, -8, 0xff0088);
+createEnergyPillar(-8, 8, 0x0088ff);
+createEnergyPillar(8, 8, 0x00ffcc);
+
+// ===== ORBITING SPHERES =====
+const orbiters = [];
+function createOrbiter(radius, height, speed, color, size) {
+  const geo = new THREE.SphereGeometry(size, 12, 12);
+  const mat = new THREE.MeshStandardMaterial({
+    color: color,
+    emissive: new THREE.Color(color),
+    emissiveIntensity: 0.8,
+    metalness: 0.5,
+    roughness: 0.2,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+
+  const light = new THREE.PointLight(color, 1.5, 8);
+  mesh.add(light);
+
+  orbiters.push({ mesh, radius, height, speed, phase: Math.random() * Math.PI * 2 });
+  return mesh;
+}
+
+createOrbiter(12, 8, 0.3, 0x00ffcc, 0.3);
+createOrbiter(18, 12, -0.2, 0xff0088, 0.4);
+createOrbiter(8, 5, 0.5, 0x0088ff, 0.25);
+createOrbiter(25, 6, 0.15, 0xffaa00, 0.5);
+
+// ===== DATA STREAMS =====
+const dataStreams = [];
+function createDataStream(x1, y1, z1, x2, y2, z2, color) {
+  const points = [];
+  const steps = 20;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    points.push(new THREE.Vector3(
+      x1 + (x2 - x1) * t,
+      y1 + (y2 - y1) * t + Math.sin(t * Math.PI) * 3,
+      z1 + (z2 - z1) * t
+    ));
+  }
+  const curve = new THREE.CatmullRomCurve3(points);
+  const tubeGeo = new THREE.TubeGeometry(curve, 30, 0.03, 4, false);
+  const tubeMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5 });
+  const tube = new THREE.Mesh(tubeGeo, tubeMat);
+  scene.add(tube);
+
+  // 流れるパーティクル
+  const partGeo = new THREE.SphereGeometry(0.08, 4, 4);
+  const partMat = new THREE.MeshBasicMaterial({ color: color });
+  const part = new THREE.Mesh(partGeo, partMat);
+  scene.add(part);
+
+  dataStreams.push({ curve, particle: part, progress: Math.random(), speed: 0.003 + Math.random() * 0.005 });
+}
+
+createDataStream(-15, 0.5, -20, 0, 0.5, 0, 0x00ffcc);
+createDataStream(15, 0.5, -20, 0, 0.5, 0, 0xff0088);
+createDataStream(0, 0.5, 0, -15, 0.5, 20, 0x0088ff);
+createDataStream(0, 0.5, 0, 15, 0.5, 20, 0x00ffcc);
+
+// ===== HEXAGONAL FLOOR TILES =====
+function createHexTiles() {
+  const hexGeo = new THREE.CylinderGeometry(1, 1, 0.05, 6);
+  const hexMat = new THREE.MeshStandardMaterial({
+    color: 0x000822,
+    metalness: 0.8,
+    roughness: 0.3,
+    emissive: 0x001133,
+    emissiveIntensity: 0.3,
+  });
+
+  const positions = [
+    [0, 0], [2.1, 0], [-2.1, 0], [1.05, 1.8], [-1.05, 1.8],
+    [1.05, -1.8], [-1.05, -1.8], [4.2, 0], [-4.2, 0],
+    [3.15, 1.8], [-3.15, 1.8], [3.15, -1.8], [-3.15, -1.8],
+  ];
+
+  positions.forEach(([x, z]) => {
+    const hex = new THREE.Mesh(hexGeo, hexMat);
+    hex.position.set(x, 0.01, z);
+    hex.rotation.y = Math.PI / 6;
+
+    const edgeGeo = new THREE.EdgesGeometry(hexGeo);
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x00ffcc44, transparent: true, opacity: 0.6 });
+    const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+    hex.add(edges);
+
+    scene.add(hex);
+  });
+}
+createHexTiles();
+
+// ===== CAMERA / CONTROLS =====
+let yaw = 0, pitch = 0;
+let isDragging = false;
+let lastMouseX = 0, lastMouseY = 0;
+const keys = {};
+const moveSpeed = { base: 0.15, shift: 0.4 };
+
+document.addEventListener('keydown', e => keys[e.code] = true);
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+document.addEventListener('mousedown', e => {
+  isDragging = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+});
+document.addEventListener('mouseup', () => isDragging = false);
+document.addEventListener('mousemove', e => {
+  if (isDragging) {
+    yaw -= (e.clientX - lastMouseX) * 0.003;
+    pitch -= (e.clientY - lastMouseY) * 0.003;
+    pitch = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch));
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+  // カーソル
+  const cursor = document.getElementById('cursor');
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+});
+
+// タッチ
+let lastTouchX = 0, lastTouchY = 0;
+document.addEventListener('touchstart', e => {
+  lastTouchX = e.touches[0].clientX;
+  lastTouchY = e.touches[0].clientY;
+});
+document.addEventListener('touchmove', e => {
+  yaw -= (e.touches[0].clientX - lastTouchX) * 0.004;
+  pitch -= (e.touches[0].clientY - lastTouchY) * 0.004;
+  pitch = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch));
+  lastTouchX = e.touches[0].clientX;
+  lastTouchY = e.touches[0].clientY;
+  e.preventDefault();
+}, { passive: false });
+
+function updateCamera() {
+  const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? moveSpeed.shift : moveSpeed.base;
+
+  const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+  const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  const up = new THREE.Vector3(0, 1, 0);
+
+  if (keys['KeyW'] || keys['ArrowUp']) camera.position.addScaledVector(fwd, speed);
+  if (keys['KeyS'] || keys['ArrowDown']) camera.position.addScaledVector(fwd, -speed);
+  if (keys['KeyA'] || keys['ArrowLeft']) camera.position.addScaledVector(right, -speed);
+  if (keys['KeyD'] || keys['ArrowRight']) camera.position.addScaledVector(right, speed);
+  if (keys['KeyE']) camera.position.addScaledVector(up, speed);
+  if (keys['KeyQ']) camera.position.addScaledVector(up, -speed);
+
+  camera.position.y = Math.max(0.5, camera.position.y);
+
+  const target = camera.position.clone().add(fwd);
+  camera.lookAt(target);
+}
+
+// ===== MINIMAP =====
+const minimapCanvas = document.getElementById('minimap-canvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+function drawMinimap() {
+  minimapCtx.clearRect(0, 0, 120, 80);
+  minimapCtx.fillStyle = 'rgba(0,0,0,0.5)';
+  minimapCtx.fillRect(0, 0, 120, 80);
+
+  const scale = 0.6;
+  const ox = 60, oy = 40;
+
+  // ビル
+  minimapCtx.fillStyle = '#002244';
+  buildingData.forEach(([x, z]) => {
+    const sx = ox + x * scale;
+    const sy = oy + z * scale;
+    minimapCtx.fillRect(sx - 2, sy - 2, 4, 4);
+  });
+
+  // ポータル
+  portals.forEach((p, i) => {
+    const colors = ['#00ffcc', '#ff0088', '#0088ff'];
+    minimapCtx.fillStyle = colors[i];
+    const pos = p.group.position;
+    minimapCtx.beginPath();
+    minimapCtx.arc(ox + pos.x * scale, oy + pos.z * scale, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
+  });
+
+  // プレイヤー
+  const px = ox + camera.position.x * scale;
+  const pz = oy + camera.position.z * scale;
+  minimapCtx.fillStyle = '#ffffff';
+  minimapCtx.beginPath();
+  minimapCtx.arc(px, pz, 3, 0, Math.PI * 2);
+  minimapCtx.fill();
+
+  // 方向
+  minimapCtx.strokeStyle = '#ffffff';
+  minimapCtx.lineWidth = 1;
+  minimapCtx.beginPath();
+  minimapCtx.moveTo(px, pz);
+  minimapCtx.lineTo(px - Math.sin(yaw) * 10, pz - Math.cos(yaw) * 10);
+  minimapCtx.stroke();
+}
+
+// ===== CHAT =====
+const chatMessages = [
+  { name: 'Zephyr_X', text: 'NEXUS接続完了' },
+  { name: 'V01D_7', text: 'ポータルゾーンに移動中...' },
+  { name: 'NX_Aria', text: 'このエリアは美しい' },
+  { name: 'Sigma_9', text: '座標 0,0,0 集合' },
+  { name: 'Zephyr_X', text: 'エネルギー充填85%' },
+  { name: 'V01D_7', text: 'ポータル起動シーケンス開始' },
+  { name: 'NX_Aria', text: 'データストリームを確認' },
+  { name: 'Sigma_9', text: '深淵へようこそ' },
+];
+let chatIdx = 0;
+const chatPanel = document.getElementById('chat-panel');
+
+function addChatMessage() {
+  const msg = chatMessages[chatIdx % chatMessages.length];
+  chatIdx++;
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.innerHTML = `<span class="chat-name">${msg.name}</span>${msg.text}`;
+  chatPanel.appendChild(div);
+  if (chatPanel.children.length > 5) chatPanel.removeChild(chatPanel.firstChild);
+  setTimeout(addChatMessage, 3000 + Math.random() * 4000);
+}
+setTimeout(addChatMessage, 2000);
+
+// ===== HUD COORDS =====
+const coordX = document.getElementById('coord-x');
+const coordY = document.getElementById('coord-y');
+const coordZ = document.getElementById('coord-z');
+const coordZone = document.getElementById('coord-zone');
+const portalInfo = document.getElementById('portal-info');
+
+function getZone(x, z) {
+  const d = Math.sqrt(x * x + z * z);
+  if (d < 8) return 'ORIGIN NEXUS';
+  if (d < 20) return 'INNER VOID';
+  if (d < 40) return 'OUTER RING';
+  return 'DEEP SPACE';
+}
+
+// ===== RESIZE =====
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ===== ANIMATION =====
+let time = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  time += 0.016;
+
+  updateCamera();
+
+  // プラットフォーム浮遊
+  platforms.forEach(p => {
+    p.mesh.position.y = p.baseY + Math.sin(time * p.speed + p.phase) * 0.5;
+    p.mesh.rotation.y += 0.005;
+  });
+
+  // ポータル回転
+  portals.forEach(p => {
+    p.group.rotation.y += 0.01;
+    p.ring.rotation.z += 0.02;
+    const pulse = 0.15 + Math.sin(time * 2 + p.phase) * 0.05;
+    p.group.children[1].material.opacity = pulse;
+  });
+
+  // オービター
+  orbiters.forEach(o => {
+    o.phase += o.speed * 0.016;
+    o.mesh.position.x = Math.cos(o.phase) * o.radius;
+    o.mesh.position.z = Math.sin(o.phase) * o.radius;
+    o.mesh.position.y = o.height + Math.sin(o.phase * 2) * 1;
+  });
+
+  // データストリーム
+  dataStreams.forEach(ds => {
+    ds.progress += ds.speed;
+    if (ds.progress > 1) ds.progress = 0;
+    const pt = ds.curve.getPoint(ds.progress);
+    ds.particle.position.copy(pt);
+  });
+
+  // パーティクルゆっくり回転
+  particleField.rotation.y += 0.0003;
+
+  // ライト揺れ
+  cyanLight.intensity = 3 + Math.sin(time * 1.5) * 0.5;
+  pinkLight.position.x = 20 + Math.sin(time * 0.3) * 5;
+  blueLight.position.z = 20 + Math.cos(time * 0.4) * 5;
+
+  // HUD更新
+  coordX.textContent = `X: ${camera.position.x.toFixed(2)}`;
+  coordY.textContent = `Y: ${camera.position.y.toFixed(2)}`;
+  coordZ.textContent = `Z: ${camera.position.z.toFixed(2)}`;
+  const zone = getZone(camera.position.x, camera.position.z);
+  coordZone.textContent = `ZONE: ${zone}`;
+
+  // ポータル近接検知
+  let nearPortal = false;
+  portals.forEach(p => {
+    const dist = camera.position.distanceTo(p.group.position);
+    if (dist < 4) nearPortal = true;
+  });
+  portalInfo.classList.toggle('visible', nearPortal);
+
+  // ミニマップ
+  drawMinimap();
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
